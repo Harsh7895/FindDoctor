@@ -1,4 +1,4 @@
-function getDistanceInKm(
+export function getDistanceInKm(
   lat1: number,
   lon1: number,
   lat2: number,
@@ -17,64 +17,84 @@ function getDistanceInKm(
   return (R * c).toFixed(2); // distance in km
 }
 
-const apiKey = "AIzaSyCRNCjEZpQqJUWV1NVj_V1-JDnqRl0qekU";
-const origin = { lat: 27.147682, lng: 78.043877 };
-const endpoint = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${origin.lat},${origin.lng}&radius=5000&type=doctor&keyword=cardiologist&key=${apiKey}`;
+interface Location {
+  lat: number;
+  lng: number;
+}
 
-fetch(endpoint)
-  .then((res) => res.json())
-  .then((data) => {
-    const simplified = data.results.map(
-      (place: {
-        name: any;
-        opening_hours: any;
-        rating: any;
-        user_ratings_total: any;
-        vicinity: any;
-        place_id: any;
-        geometry: any;
-        types: any;
-        photos: any;
-      }) => {
-        const {
-          name,
-          opening_hours,
-          rating,
-          user_ratings_total,
-          vicinity,
-          place_id,
-          geometry,
-          types,
-          photos,
-        } = place;
-        const location = geometry.location;
-        const distance = getDistanceInKm(
-          origin.lat,
-          origin.lng,
-          location.lat,
-          location.lng
-        );
-        const imageUrl = photos?.[0]
-          ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photos[0].photo_reference}&key=${apiKey}`
-          : null;
+export async function findNearbyDoctors(location: Location, specialty: string = '') {
+  const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new Error('Google Places API key is not configured');
+  }
 
-        return {
-          name,
-          open_now: opening_hours?.open_now ?? "unknown",
-          rating,
-          user_ratings_total,
-          location,
-          vicinity,
-          place_id,
-          types,
-          distance_km: distance,
-          imageUrl,
-        };
-      }
-    );
+  // Use a proxy URL that will be handled by your backend
+  const proxyUrl = `${import.meta.env.VITE_BACKEND_URL}/api/places/search`;
+  
+  try {
+    const response = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        location,
+        specialty,
+        radius: 5000,
+      }),
+    });
 
-    console.log(simplified);
-  })
-  .catch((error) => {
-    console.error("Error fetching places:", error);
-  });
+    if (!response.ok) {
+      throw new Error('Failed to fetch doctors');
+    }
+
+    const data = await response.json();
+    return data.results.map((place: any) => {
+      const {
+        name,
+        opening_hours,
+        rating,
+        user_ratings_total,
+        vicinity,
+        place_id,
+        geometry,
+        types,
+        photos,
+      } = place;
+
+      const placeLocation = geometry.location;
+      const distance = getDistanceInKm(
+        location.lat,
+        location.lng,
+        placeLocation.lat,
+        placeLocation.lng
+      );
+
+      const imageUrl = photos?.[0]
+        ? `${import.meta.env.VITE_BACKEND_URL}/api/places/photo?reference=${photos[0].photo_reference}`
+        : null;
+
+      return {
+        name,
+        open_now: opening_hours?.open_now ?? "unknown",
+        rating,
+        user_ratings_total,
+        location: placeLocation,
+        vicinity,
+        place_id,
+        types,
+        distance_km: distance,
+        imageUrl,
+      };
+    });
+  } catch (error) {
+    console.error('Error finding nearby doctors:', error);
+    throw error;
+  }
+}
+
+// Example usage:
+const origin: Location = { lat: 27.147682, lng: 78.043877 };
+findNearbyDoctors(origin, 'cardiologist')
+  .then((doctors) => console.log(doctors))
+  .catch((error) => console.error(error));

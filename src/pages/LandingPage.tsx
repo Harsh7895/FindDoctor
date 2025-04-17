@@ -13,7 +13,9 @@ import { motion, useInView, useScroll, useTransform } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { CursorFollower } from "@/components/cursor-follower";
 import { MobileMenu } from "@/components/mobile-menu";
+import { UserAvatar } from "@/components/UserAvatar";
 import { useMobile } from "@/hooks/use-mobile";
+import { useNavigate  } from "react-router-dom";
 
 export default function LandingPage() {
   const { scrollYProgress } = useScroll();
@@ -25,6 +27,7 @@ export default function LandingPage() {
   const howItWorksRef = useRef(null);
   const testimonialsRef = useRef(null);
   const ctaRef = useRef(null);
+  const navigate = useNavigate()
 
   // Check if sections are in view
   const featuresInView = useInView(featuresRef, { once: true, amount: 0.2 });
@@ -258,7 +261,7 @@ export default function LandingPage() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2 }}
               >
-                DocFinder
+                Symptocare
               </motion.span>
             </a>
           </div>
@@ -286,18 +289,8 @@ export default function LandingPage() {
                   {link.name}
                 </Button>
               ))}
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="bg-teal-600 hover:bg-teal-700"
-                >
-                  Login
-                </Button>
-              </motion.div>
+             
+              <UserAvatar />
             </motion.nav>
           </div>
 
@@ -328,7 +321,7 @@ export default function LandingPage() {
                     className="max-w-[600px] text-gray-500 md:text-xl dark:text-gray-400"
                     variants={itemVariants}
                   >
-                    DocFinder matches you with the best specialists based on
+                    Symptocare matches you with the best specialists based on
                     your symptoms, with fast-track appointments and real-time
                     availability.
                   </motion.p>
@@ -439,7 +432,7 @@ export default function LandingPage() {
                   }
                   transition={{ duration: 0.5, delay: 0.3 }}
                 >
-                  Why Choose DocFinder?
+                  Why Choose Symptocare?
                 </motion.h2>
                 <motion.p
                   className="max-w-[900px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400"
@@ -533,7 +526,7 @@ export default function LandingPage() {
                   }
                   transition={{ duration: 0.5, delay: 0.3 }}
                 >
-                  How DocFinder Works
+                  How Symptocare Works
                 </motion.h2>
                 <motion.p
                   className="max-w-[900px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400"
@@ -630,7 +623,7 @@ export default function LandingPage() {
                   transition={{ duration: 0.5, delay: 0.4 }}
                 >
                   Don't just take our word for it. Here's what people are saying
-                  about DocFinder.
+                  about Symptocare.
                 </motion.p>
               </div>
             </motion.div>
@@ -738,7 +731,7 @@ export default function LandingPage() {
                   }
                   transition={{ duration: 0.5, delay: 0.3 }}
                 >
-                  Download the DocFinder app today and get matched with the
+                  Download the Symptocare app today and get matched with the
                   perfect specialist in minutes.
                 </motion.p>
               </div>
@@ -824,7 +817,7 @@ export default function LandingPage() {
                 >
                   <Stethoscope className="h-6 w-6 text-teal-600" />
                 </motion.div>
-                <span className="text-lg font-bold">DocFinder</span>
+                <span className="text-lg font-bold">Symptocare</span>
               </div>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Finding the right doctor has never been easier.
@@ -945,7 +938,7 @@ export default function LandingPage() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.7 }}
           >
-            © {new Date().getFullYear()} DocFinder. All rights reserved.
+            &copy; {new Date().getFullYear()} Symptocare. All rights reserved.
           </motion.div>
         </div>
       </motion.footer>

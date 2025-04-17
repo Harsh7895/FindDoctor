@@ -1,21 +1,17 @@
-"use client";
-
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Clock,
-  Filter,
   MapPin,
   Search,
   Star,
-  Stethoscope,
   X,
+  Filter,
+  Stethoscope,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useMobile } from "@/hooks/use-mobile";
-import { getDistanceInKm } from "./lib/utils";
 
 // Types
 interface Symptom {
@@ -27,14 +23,19 @@ interface Symptom {
 interface Doctor {
   id: string;
   name: string;
-  specialty: string;
+  address: string;
+  location: {
+    lat: number;
+    lng: number;
+  };
+  openNow: boolean;
+  photos: Array<{
+    photoReference: string;
+    photoUrl: string;
+  }>;
+  placeTypes: string[];
   rating: number;
-  reviews: number;
-  location: string;
-  distance: string;
-  availability: string;
-  image: string;
-  specialties: string[];
+  userRatingsTotal: number;
 }
 
 // Sample data
@@ -61,89 +62,13 @@ const symptoms: Symptom[] = [
   { id: "s20", name: "Swelling", category: "General" },
 ];
 
-const doctors: Doctor[] = [
-  {
-    id: "d1",
-    name: "Dr. Sarah Johnson",
-    specialty: "Neurologist",
-    rating: 4.9,
-    reviews: 124,
-    location: "Mercy Hospital",
-    distance: "2.3 miles",
-    availability: "Today",
-    image: "/placeholder.svg?height=200&width=200",
-    specialties: ["Headache", "Dizziness", "Numbness"],
-  },
-  {
-    id: "d2",
-    name: "Dr. Michael Chen",
-    specialty: "Pulmonologist",
-    rating: 4.7,
-    reviews: 98,
-    location: "City Medical Center",
-    distance: "3.1 miles",
-    availability: "Tomorrow",
-    image: "/placeholder.svg?height=200&width=200",
-    specialties: ["Cough", "Shortness of Breath"],
-  },
-  {
-    id: "d3",
-    name: "Dr. Emily Rodriguez",
-    specialty: "Gastroenterologist",
-    rating: 4.8,
-    reviews: 156,
-    location: "University Hospital",
-    distance: "1.8 miles",
-    availability: "Today",
-    image: "/placeholder.svg?height=200&width=200",
-    specialties: ["Nausea", "Abdominal Pain"],
-  },
-  {
-    id: "d4",
-    name: "Dr. James Wilson",
-    specialty: "Cardiologist",
-    rating: 4.9,
-    reviews: 210,
-    location: "Heart Care Center",
-    distance: "4.2 miles",
-    availability: "In 2 days",
-    image: "/placeholder.svg?height=200&width=200",
-    specialties: ["Chest Pain", "Shortness of Breath"],
-  },
-  {
-    id: "d5",
-    name: "Dr. Olivia Thompson",
-    specialty: "Dermatologist",
-    rating: 4.6,
-    reviews: 87,
-    location: "Skin Health Clinic",
-    distance: "2.7 miles",
-    availability: "Today",
-    image: "/placeholder.svg?height=200&width=200",
-    specialties: ["Rash", "Swelling"],
-  },
-  {
-    id: "d6",
-    name: "Dr. David Kim",
-    specialty: "Psychiatrist",
-    rating: 4.8,
-    reviews: 132,
-    location: "Mind Wellness Center",
-    distance: "3.5 miles",
-    availability: "Tomorrow",
-    image: "/placeholder.svg?height=200&width=200",
-    specialties: ["Anxiety", "Depression", "Insomnia"],
-  },
-];
-
 export default function FindDoctorPage() {
   const isMobile = useMobile();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSymptoms, setSelectedSymptoms] = useState<Symptom[]>([]);
-  const [fetchedDoctors, setFetchedDoctors] = useState<any>();
+  const [fetchedDoctors, setFetchedDoctors] = useState<Doctor[]>([]);
   const [filteredSymptoms, setFilteredSymptoms] = useState<Symptom[]>(symptoms);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>(doctors);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [sortBy, setSortBy] = useState("relevance");
   const [isLoading, setIsLoading] = useState(false);
@@ -153,25 +78,6 @@ export default function FindDoctorPage() {
     null
   ); // { lat: ..., lng: ... }
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setError("Geolocation is not supported by your browser.");
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        });
-      },
-      (err) => {
-        setError("Unable to retrieve your location: " + err.message);
-      }
-    );
-  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -209,49 +115,41 @@ export default function FindDoctorPage() {
     }
   }, [searchTerm, selectedSymptoms]);
 
-  // Filter doctors based on selected symptoms
   useEffect(() => {
-    if (selectedSymptoms.length > 0) {
-      setIsLoading(true);
-
-      // Simulate API call delay
-      setTimeout(() => {
-        const symptomNames = selectedSymptoms.map((s) => s.name);
-        const filtered = doctors.filter((doctor) =>
-          doctor.specialties.some((specialty) =>
-            symptomNames.includes(specialty)
-          )
+    const searchDoctors = async (lat: number, lng: number, disease: string) => {
+      try {
+        setIsLoading(true);
+        const response = await fetch(
+          `${import.meta.env.VITE_BACKEND_URL}/api/places/search-doctors?lat=${lat}&lng=${lng}&disease=${disease}`
         );
-
-        // Sort doctors based on the selected sort option
-        let sorted = [...filtered];
-        if (sortBy === "rating") {
-          sorted = sorted.sort((a, b) => b.rating - a.rating);
-        } else if (sortBy === "distance") {
-          sorted = sorted.sort(
-            (a, b) =>
-              Number.parseFloat(a.distance) - Number.parseFloat(b.distance)
-          );
-        } else if (sortBy === "availability") {
-          const availabilityRank = (availability: string) => {
-            if (availability === "Today") return 0;
-            if (availability === "Tomorrow") return 1;
-            return 2;
-          };
-          sorted = sorted.sort(
-            (a, b) =>
-              availabilityRank(a.availability) -
-              availabilityRank(b.availability)
-          );
-        }
-
-        setFilteredDoctors(sorted);
+        const data = await response.json();
+        console.log(data);
+        setFetchedDoctors(data.results);
+      } catch (error) {
+        console.error("Error fetching doctors:", error);
+        setError("Failed to fetch doctors. Please try again.");
+      } finally {
         setIsLoading(false);
-      }, 800);
-    } else {
-      setFilteredDoctors(doctors);
+      }
+    };
+
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by your browser.");
+      return;
     }
-  }, [selectedSymptoms, sortBy]);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setLocation({ lat, lng });
+        await searchDoctors(lat, lng, "");
+      },
+      (err) => {
+        setError("Unable to retrieve your location: " + err.message);
+      }
+    );
+  }, []);
 
   const handleSymptomSelect = (symptom: Symptom) => {
     setSelectedSymptoms([...selectedSymptoms, symptom]);
@@ -267,6 +165,46 @@ export default function FindDoctorPage() {
     setSelectedSymptoms([]);
     setSearchTerm("");
   };
+
+  // Handle image error with professional doctor avatar
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    const seed = e.currentTarget.alt.replace(/[^a-zA-Z0-9]/g, '') || 'doctor';
+    e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&backgroundColor=b6e3f4&eyes=happy&mouth=smile&texture=circuits&scale=80&radius=50`;
+  };
+
+  // Search doctors when symptoms change
+  useEffect(() => {
+    const searchDoctors = async (lat: number, lng: number, disease: string) => {
+      try {
+        setIsLoading(true);
+        const response = await fetch(
+          `${import.meta.env.VITE_BACKEND_URL}/api/places/search-doctors?lat=${lat}&lng=${lng}&disease=${disease}`
+        );
+        const data = await response.json();
+        setFetchedDoctors(data.results);
+      } catch (error) {
+        console.error("Error fetching doctors:", error);
+        setError("Failed to fetch doctors. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (location && selectedSymptoms.length > 0) {
+      searchDoctors(location.lat, location.lng, selectedSymptoms[0].name);
+    }
+  }, [selectedSymptoms, location]);
+
+  // Sort doctors based on selected criteria
+  const sortedDoctors = useMemo(() => {
+    let sorted = [...fetchedDoctors];
+    if (sortBy === "rating") {
+      sorted = sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else if (sortBy === "reviews") {
+      sorted = sorted.sort((a, b) => (b.userRatingsTotal || 0) - (a.userRatingsTotal || 0));
+    }
+    return sorted;
+  }, [fetchedDoctors, sortBy]);
 
   // Animation variants
   const containerVariants = {
@@ -351,73 +289,18 @@ export default function FindDoctorPage() {
     },
   };
 
-  useEffect(() => {
-    const handleFindDoctor = async () => {
-      if (!location) return;
-
-      const apiKey = "AIzaSyCRNCjEZpQqJUWV1NVj_V1-JDnqRl0qekU";
-      const origin = { lat: location.lat, lng: location.lng };
-
-      const endpoint = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${origin.lat},${origin.lng}&radius=5000&type=doctor&keyword=cardiologist&key=${apiKey}`;
-
-      try {
-        const res = await fetch(endpoint);
-        const data = await res.json();
-        console.log(data);
-
-        if (!data.results) {
-          console.warn("No results found");
-          return;
-        }
-
-        const simplified = data.results.map((place: any) => {
-          const {
-            name,
-            opening_hours,
-            rating,
-            user_ratings_total,
-            vicinity,
-            place_id,
-            geometry,
-            types,
-            photos,
-          } = place;
-
-          const location = geometry.location;
-          const distance = getDistanceInKm(
-            origin.lat,
-            origin.lng,
-            location.lat,
-            location.lng
-          );
-
-          const imageUrl = photos?.[0]
-            ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photos[0].photo_reference}&key=${apiKey}`
-            : null;
-
-          return {
-            name,
-            open_now: opening_hours?.open_now ?? "unknown",
-            rating,
-            user_ratings_total,
-            location,
-            vicinity,
-            place_id,
-            types,
-            distance_km: distance,
-            imageUrl,
-          };
-        });
-
-        setFetchedDoctors(simplified); // ✅ Now we set an array of doctors
-        console.log("Doctors fetched:", simplified);
-      } catch (error) {
-        console.error("Error fetching places:", error);
-      }
-    };
-
-    handleFindDoctor();
-  }, [location]);
+  // Calculate distance between two points
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return Math.round(R * c * 10) / 10; // Distance in km rounded to 1 decimal
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -436,7 +319,7 @@ export default function FindDoctorPage() {
             >
               <Stethoscope className="h-6 w-6 text-teal-600" />
             </motion.div>
-            <span className="text-lg font-bold">DocFinder</span>
+            <span className="text-lg font-bold">Symptocare</span>
           </a>
 
           <div className="flex items-center space-x-4">
@@ -1011,7 +894,7 @@ export default function FindDoctorPage() {
               </h2>
               <div className="flex items-center">
                 <span className="text-sm text-gray-600">
-                  {filteredDoctors.length} doctors found
+                  {fetchedDoctors.length} doctors found
                 </span>
               </div>
             </motion.div>
@@ -1041,8 +924,8 @@ export default function FindDoctorPage() {
                 initial="hidden"
                 animate="visible"
               >
-                {filteredDoctors.length > 0 ? (
-                  filteredDoctors.map((doctor, index) => (
+                {sortedDoctors.length > 0 ? (
+                  sortedDoctors.map((doctor, index) => (
                     <motion.div
                       key={doctor.id}
                       className="overflow-hidden rounded-xl border bg-white shadow-md transition-all hover:shadow-lg"
@@ -1053,22 +936,23 @@ export default function FindDoctorPage() {
                       <div className="grid grid-cols-1 md:grid-cols-4">
                         <div className="flex items-center justify-center p-4 md:p-6">
                           <motion.img
-                            src={doctor.image}
+                            src={doctor.photos?.[0]?.photoUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${doctor.name.replace(/[^a-zA-Z0-9]/g, '')}&backgroundColor=b6e3f4&eyes=happy&mouth=smile&texture=circuits&scale=80&radius=50`}
                             alt={doctor.name}
-                            className="h-24 w-24 rounded-full object-cover"
+                            className="h-24 w-24 rounded-full object-cover bg-teal-50"
                             whileHover={{ scale: 1.05 }}
+                            onError={handleImageError}
                           />
                         </div>
                         <div className="col-span-2 p-4 md:p-6">
                           <div className="mb-2 flex items-center">
                             <h3 className="text-lg font-bold">{doctor.name}</h3>
-                            {doctor.availability === "Today" && (
+                            {doctor.openNow && (
                               <Badge className="ml-2 bg-green-100 text-green-800">
-                                Available Today
+                                Open Now
                               </Badge>
                             )}
                           </div>
-                          <p className="text-gray-600">{doctor.specialty}</p>
+                          <p className="text-gray-600">{doctor.placeTypes.join(", ")}</p>
                           <div className="mt-2 flex items-center">
                             <div className="flex items-center text-yellow-400">
                               <Star className="mr-1 h-4 w-4 fill-current" />
@@ -1078,37 +962,36 @@ export default function FindDoctorPage() {
                             </div>
                             <span className="mx-2 text-gray-400">•</span>
                             <span className="text-sm text-gray-600">
-                              {doctor.reviews} reviews
+                              {doctor.userRatingsTotal} reviews
                             </span>
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {doctor.specialties.map((specialty) => (
-                              <Badge
-                                key={specialty}
-                                className="bg-teal-50 text-teal-700"
-                                variant="outline"
-                              >
-                                {specialty}
-                              </Badge>
-                            ))}
                           </div>
                         </div>
                         <div className="flex flex-col justify-between border-t p-4 md:border-l md:border-t-0 md:p-6">
                           <div>
-                            <div className="flex items-center text-gray-600">
-                              <MapPin className="mr-1 h-4 w-4" />
-                              <span className="text-sm">{doctor.location}</span>
-                            </div>
-                            <div className="mt-1 flex items-center text-gray-600">
-                              <Clock className="mr-1 h-4 w-4" />
-                              <span className="text-sm">
-                                Available {doctor.availability}
-                              </span>
-                            </div>
-                            <div className="mt-1 flex items-center text-gray-600">
-                              <span className="text-sm">
-                                {doctor.distance} away
-                              </span>
+                            <div className="flex items-center text-gray-600 group relative">
+                              <MapPin className="mr-1 h-4 w-4 flex-shrink-0" />
+                              <div className="relative">
+                                <p className="text-sm line-clamp-2"
+                                   title={doctor.address}>
+                                  {doctor.address}
+                                </p>
+                                {location && (
+                                  <p className="text-xs text-teal-600 mt-1">
+                                    {calculateDistance(
+                                      location.lat,
+                                      location.lng,
+                                      doctor.location.lat,
+                                      doctor.location.lng
+                                    )} km away
+                                  </p>
+                                )}
+                                <div className="absolute left-0 -top-1 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-gray-900 text-white text-xs rounded-md py-2 px-3 w-64 shadow-lg z-50">
+                                  <div className="relative">
+                                    <div className="absolute w-3 h-3 bg-gray-900 transform rotate-45 -bottom-5 left-3"></div>
+                                    {doctor.address}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </div>
                           <motion.div
